@@ -12,8 +12,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import javax.swing.DefaultCellEditor;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -23,7 +25,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
-import javax.swing.table.DefaultTableModel;
+import javax.swing.event.CellEditorListener;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
@@ -75,6 +77,7 @@ public class Main {
 	 */
 	private void initialize() {
 		Model model = new Model();
+		model.addColumn("");
 		model.addColumn("Student ID");
 	    model.addColumn("Name");
 	    model.addColumn("Age");
@@ -84,22 +87,82 @@ public class Main {
 		frame = new JFrame();
 		frame.getContentPane().setBackground(new Color(0, 0, 51));
 		frame.getContentPane().setLayout(null);
+		final JButton btnDelete = new JButton("Delete");
 		
 		JScrollPane scrollPane = new JScrollPane();
-		scrollPane.setBounds(250, 50, 472, 370);
+		scrollPane.setBounds(250, 50, 587, 370);
 		frame.getContentPane().add(scrollPane);
 		JTable table = new JTable(model);
+		table.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				if(e.getButton() == 2 || e.getButton() == 3) return;
+				//System.out.println(e);
+			}
+		});
 		table.setRowSelectionAllowed(false);
 		scrollPane.setViewportView(table);
 		table.setFillsViewportHeight(true);
 		table.getTableHeader().setReorderingAllowed(false);
+		table.getColumnModel().getColumn(0).setPreferredWidth(23);
+		table.getColumnModel().getColumn(1).setPreferredWidth(100);
+		table.getColumnModel().getColumn(2).setPreferredWidth(155);
+		table.getColumnModel().getColumn(3).setPreferredWidth(28);
+		table.getColumnModel().getColumn(4).setPreferredWidth(80);
+		table.getColumn("").setCellRenderer(new JCheckRender());
+		table.getColumn("").setCellEditor(new JCheckBoxEditor());
 		JLabel lblNewLabel = new JLabel("STUDENTS LOG");
-		lblNewLabel.setFont(new Font("Tahoma", Font.BOLD, 16));
+		lblNewLabel.setFont(new Font("Trebuchet MS", Font.BOLD, 24));
 		lblNewLabel.setForeground(new Color(204, 204, 255));
 		lblNewLabel.setHorizontalAlignment(SwingConstants.CENTER);
-		lblNewLabel.setBounds(28, 11, 183, 37);
+		lblNewLabel.setBounds(39, 11, 183, 37);
 		frame.getContentPane().add(lblNewLabel);
-		
+		btnDelete.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				int cons = 0;
+				for(int i = 0; i < table.getRowCount(); i++) {
+					boolean isSel = (boolean) table.getValueAt(i, 0);
+					PreparedStatement stmt = null;
+					if(isSel) {
+						System.out.println("Deleting a row in the table...");
+					    String sql = "DELETE FROM Student WHERE student_id = ?";
+					      try {
+							stmt = con.prepareStatement(sql);
+						      stmt.setString(1, (String) table.getValueAt(i, 1));
+						      stmt.executeUpdate();
+						      con.commit();
+						      stmt.close();
+						      cons++;
+						} catch (SQLException e1) {
+							// TODO Auto-generated catch block
+							e1.printStackTrace();
+						}
+					}
+				}
+				 Statement as;
+				try {
+					as = con.createStatement();
+					ResultSet set = as.executeQuery("SELECT * FROM Student");
+				      model.setRowCount(0);
+						while(set.next()) {
+							String names = set.getString("name");
+							String sds = set.getString("student_id");
+							String addresss = set.getString("address");
+							String genders = set.getString("gender");
+							String bddays = set.getString("birthday");
+							String ages = set.getString("age");
+							model.addRow(new Object[] {false, sds, names, ages, bddays, genders, addresss});
+						}
+						as.close();
+				} catch (SQLException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+			      
+				JOptionPane.showMessageDialog(null, cons+" item deleted successfully!");
+			}
+		});
 		JPanel panel = new JPanel();
 		panel.setBounds(10, 90, 230, 330);
 		frame.getContentPane().add(panel);
@@ -118,7 +181,15 @@ public class Main {
 		sid.setBounds(72, 37, 148, 20);
 		panel.add(sid);
 		sid.setColumns(10);
-		
+		((AbstractDocument)sid.getDocument()).setDocumentFilter(new DocumentFilter() {
+		      public void insertString(FilterBypass fb, int offset, String string, AttributeSet attr) throws BadLocationException {
+		        fb.insertString(offset, string.replaceAll("[^0-9]", ""), attr);
+		      }
+		      
+		      public void replace(FilterBypass fb, int offset, int length, String string, AttributeSet attr) throws BadLocationException {
+		        fb.replace(offset, length, string.replaceAll("[^0-9]", ""), attr);
+		      }
+		    });
 		JLabel lblNewLabel_1_1_1 = new JLabel("Name : ");
 		lblNewLabel_1_1_1.setFont(new Font("Tahoma", Font.PLAIN, 13));
 		lblNewLabel_1_1_1.setBounds(0, 64, 75, 14);
@@ -181,7 +252,7 @@ public class Main {
 				String gender = set.getString("gender");
 				String bdday = set.getString("birthday");
 				String age = set.getString("age");
-				model.addRow(new Object[] {sd, name, age, bdday, gender, address});
+				model.addRow(new Object[] {Boolean.FALSE, sd, name, age, bdday, gender, address});
 			}
 		} catch (SQLException e) {
 			// TODO Auto-generated catch block
@@ -197,6 +268,10 @@ public class Main {
 				String gender = gnder.getSelectedItem().toString();
 				String bdday = bday.getDateStringOrEmptyString();
 				String ag = age.getText();
+				if (sd.trim().isEmpty() || name.trim().isEmpty() || address.trim().isEmpty() || ag.trim().isEmpty() ) {
+					  JOptionPane.showMessageDialog(null, "Please enter a value.");
+					  return;
+					}
 				try {
 					String checkKey = "SELECT * FROM Student WHERE student_id = ?";
 					PreparedStatement stat = con.prepareStatement(checkKey);
@@ -218,6 +293,7 @@ public class Main {
 				      statement.setString(6, ag);
 				      statement.executeUpdate();
 				      con.commit();
+				      statement.close();
 				      Statement as = con.createStatement();
 				      ResultSet set = as.executeQuery("SELECT * FROM Student");
 				      model.setRowCount(0);
@@ -228,10 +304,10 @@ public class Main {
 							String genders = set.getString("gender");
 							String bddays = set.getString("birthday");
 							String ages = set.getString("age");
-							model.addRow(new Object[] {sds, names, ages, bddays, genders, addresss});
+							model.addRow(new Object[] {false, sds, names, ages, bddays, genders, addresss});
 						}
 						as.close();
-						statement.close();
+						set.close();
 				}catch(Exception es) {
 					es.printStackTrace();
 				}
@@ -243,9 +319,32 @@ public class Main {
 		btnNewButton.setFont(new Font("Tahoma", Font.BOLD, 12));
 		btnNewButton.setBounds(10, 225, 105, 31);
 		panel.add(btnNewButton);
+		
+		btnDelete.setForeground(Color.WHITE);
+		btnDelete.setFont(new Font("Tahoma", Font.BOLD, 12));
+		btnDelete.setBorderPainted(false);
+		btnDelete.setBackground(new Color(255, 0, 0));
+		btnDelete.setBounds(10, 267, 105, 31);
+		panel.add(btnDelete);
 		frame.setResizable(false);
-		frame.setBounds(100, 100, 748, 470);
+		frame.setBounds(100, 100, 863, 470);
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 	}
+}
+
+class JCheckBoxEditor extends DefaultCellEditor {
+    /**
+	 * 
+	 */
+	private static final long serialVersionUID = 3846878501975009951L;
+
+	public JCheckBoxEditor() {
+        super(new JCheckBox());
+    }
 	
+	@Override
+	public void addCellEditorListener(CellEditorListener l) {
+		// TODO Auto-generated method stub
+		super.addCellEditorListener(l);
+	}
 }
